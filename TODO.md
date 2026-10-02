@@ -8,6 +8,16 @@ project, the game is the harness for it. Last commit 2026-08-31.
 
 ---
 
+## Audit findings (2026-10-02)
+
+Fleet audit follow-up; all fixed on main 2026-10-02 (local app, nothing to deploy - push to publish).
+
+- [x] 2026-10-02 high - README quickstart pointed at :5173, Vite runs on :3000 (`README.md:36`, `CONTRIBUTING.md`) - fixed.
+- [x] 2026-10-02 medium - Open CORS + all-interface bind let any site or LAN host spend the user's key (`server/index.ts`) - binds 127.0.0.1 (`HOST` opt-in), 403 on foreign Origin, CORS only for the local UI, `intervalMs` clamped 5-60s; tests in `server/http.test.ts`.
+- [x] 2026-10-02 medium - stop -> start mid-turn ran an old turn into the reset game (`server/engine.ts`) - generation id + `StaleTurnError`; regression test in `server/engine.test.ts`.
+- [x] 2026-10-02 medium - `npm start` served no client (`server/index.ts`) - serves `dist/` with SPA fallback when built.
+- [x] 2026-10-02 low - package.json said ISC, LICENSE is MIT - now MIT + author + repository.
+
 ## 🟡 Refactor survey (2026-09-18)
 
 Found by a read-only survey of the repo on 2026-09-18; none was tracked before. Ranked by payoff for the effort. 🟠 = a real bug or risk, not only tidiness.
