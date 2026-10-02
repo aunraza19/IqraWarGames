@@ -16,7 +16,8 @@ vi.mock('./ai.js', () => ({
   getNarrative: vi.fn(async () => 'narrative'),
 }))
 
-const { GameEngine } = await import('./engine.js')
+const { GameEngine, StaleTurnError } = await import('./engine.js')
+const ai = await import('./ai.js')
 
 /** Pin every die roll this turn to `face` (1-6). */
 function dice(face: number) {
@@ -276,5 +277,23 @@ describe('game end', () => {
     const owned = Object.values(engine.state.map.territories).filter(t => t.owner === 'nato').length
     expect(nato.territoryCount).toBe(owned)
     expect(nato.score).toBeGreaterThan(owned * 3)
+  })
+})
+
+describe('stop -> start mid-turn', () => {
+  it('discards a turn that was in flight when the game was reset', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(r => { release = r })
+    vi.mocked(ai.getFactionOrders).mockImplementation(async () => {
+      await gate
+      return { orders: [], reasoning: 'late' }
+    })
+    const inFlight = engine.executeTurn()
+    engine.reset() // what start() does while the old turn awaits the AI
+    release()
+    await expect(inFlight).rejects.toBeInstanceOf(StaleTurnError)
+    expect(engine.state.game.turn).toBe(0)
+    expect(engine.turnHistory).toHaveLength(0)
+    expect(engine.chatLog.some(m => m.message.includes('late') || m.message.includes('forfeit'))).toBe(false)
   })
 })

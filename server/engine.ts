@@ -33,6 +33,14 @@ const personas: Record<string, string> = {
   china: loadPersona('china')
 }
 
+/** Thrown when a game was reset (stop -> start) while a turn was awaiting the AI. */
+export class StaleTurnError extends Error {
+  constructor(turn: number) {
+    super(`Turn ${turn} discarded: the game was reset while it was in flight`)
+    this.name = 'StaleTurnError'
+  }
+}
+
 export class GameEngine {
   state: GameState
   turnHistory: TurnResult[] = []
@@ -43,6 +51,8 @@ export class GameEngine {
   running = false
   turnExecuting = false
   turnInterval: ReturnType<typeof setInterval> | null = null
+  /** Bumped by reset(); a turn that started under an older generation is discarded. */
+  generation = 0
 
   constructor() {
     const raw = readFileSync(resolve(__dirname, '../game/initial-world.json'), 'utf-8')
@@ -50,6 +60,7 @@ export class GameEngine {
   }
 
   reset() {
+    this.generation++
     const raw = readFileSync(resolve(__dirname, '../game/initial-world.json'), 'utf-8')
     this.state = JSON.parse(raw)
     this.turnHistory = []
@@ -82,13 +93,16 @@ export class GameEngine {
         console.log('Previous turn still executing, skipping...')
         return
       }
+      const gen = this.generation
       this.turnExecuting = true
       try {
         await this.executeTurn()
       } catch (err) {
-        console.error('Turn error:', err)
+        if (err instanceof StaleTurnError) console.log(err.message)
+        else console.error('Turn error:', err)
       } finally {
-        this.turnExecuting = false
+        // A turn from a previous game must not clear the flag for the new game's turn.
+        if (gen === this.generation) this.turnExecuting = false
       }
     }, intervalMs)
   }
@@ -227,6 +241,7 @@ export class GameEngine {
   }
 
   async executeTurn(): Promise<TurnResult> {
+    const gen = this.generation
     this.state.game.turn++
     const turn = this.state.game.turn
     const events: GameEvent[] = []
@@ -287,6 +302,7 @@ export class GameEngine {
       const briefing = this.buildBriefing(factionId)
       console.log(`[turn ${turn}] Calling getFactionOrders for ${factionId}...`)
       const orders = await getFactionOrders(factionId, personas[factionId], briefing)
+      if (gen !== this.generation) return
       console.log(`[turn ${turn}] Got orders for ${factionId}: ${orders.orders.length} orders`)
       allOrders[factionId] = orders
 
@@ -301,6 +317,7 @@ export class GameEngine {
     })
 
     await Promise.all(orderPromises)
+    if (gen !== this.generation) throw new StaleTurnError(turn)
     console.log(`[turn ${turn}] All faction orders received`)
 
     // Resolve orders
@@ -351,6 +368,7 @@ export class GameEngine {
       `Turn ${turn}. Events: ${eventSummary}. ` +
       Object.values(this.state.factions).map(f => `${f.name}: ${f.territoryCount} territories, ${f.resources.gold}g`).join('. ')
     )
+    if (gen !== this.generation) throw new StaleTurnError(turn)
     this.addChat('observer', 'narrator', 'The Chronicler', narrative)
 
     // Store recent events for globe animation
