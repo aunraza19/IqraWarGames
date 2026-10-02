@@ -9,10 +9,10 @@ good PR is "it type-checks, a full game still runs end to end, and the AI contra
 ```sh
 npm install                 # Node >= 20
 cp .env.example .env        # add ONE provider key - Gemini is the cheapest default
-npm run dev                 # client on :5173, server on :3001
+npm run dev                 # client on :3000, server on 127.0.0.1:3001
 ```
 
-Open http://localhost:5173 and click **Start Game**. If a game does not advance past turn 1,
+Open http://localhost:3000 and click **Start Game**. If a game does not advance past turn 1,
 the problem is almost always the provider key or a model returning prose instead of JSON -
 check the server console before anything else.
 

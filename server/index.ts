@@ -1,7 +1,11 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import { existsSync } from 'fs'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { GameEngine } from './engine.js'
+import { clampInterval, isAllowedOrigin } from './http.js'
 
 // Validate AI provider on startup
 import { validateProviders, logProviderConfig } from './ai-provider.js'
@@ -21,8 +25,20 @@ try {
 
 const app = express()
 const PORT = 3001
+// Loopback only by default: every game spends the user's provider key.
+// Set HOST=0.0.0.0 to expose it on the LAN deliberately.
+const HOST = process.env.HOST || '127.0.0.1'
 
-app.use(cors())
+// Reject cross-site browser requests outright (a text/plain form POST skips the
+// CORS preflight), then allow CORS only for the local UI.
+app.use((req, res, next) => {
+  if (!isAllowedOrigin(req.headers.origin)) {
+    res.status(403).json({ error: 'origin not allowed' })
+    return
+  }
+  next()
+})
+app.use(cors({ origin: (origin, cb) => cb(null, isAllowedOrigin(origin)) }))
 app.use(express.json())
 
 const engine = new GameEngine()
@@ -50,7 +66,7 @@ app.get('/api/turns', (req, res) => {
 
 // Start game
 app.post('/api/start', (req, res) => {
-  const intervalMs = req.body?.intervalMs || 10000
+  const intervalMs = clampInterval(req.body?.intervalMs)
   console.log(`\n>>> /api/start called with intervalMs=${intervalMs}`)
   engine.start(intervalMs)
   console.log(`>>> Game started, running=${engine.running}`)
@@ -70,8 +86,15 @@ app.post('/api/reset', (_req, res) => {
   res.json({ status: 'reset' })
 })
 
-app.listen(PORT, () => {
-  console.log(`War Games server running on http://localhost:${PORT}`)
+// Production: serve the built client (npm run build) from the same origin.
+const distDir = resolve(dirname(fileURLToPath(import.meta.url)), '../dist')
+if (existsSync(resolve(distDir, 'index.html'))) {
+  app.use(express.static(distDir))
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile('index.html', { root: distDir }))
+}
+
+app.listen(PORT, HOST, () => {
+  console.log(`War Games server running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   console.log('Endpoints:')
   console.log('  GET  /api/state  - Current game state')
   console.log('  GET  /api/chat   - Chat log')

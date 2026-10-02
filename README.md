@@ -33,7 +33,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open http://localhost:5173 and click **Start Game**.
+Open http://localhost:3000 and click **Start Game**. The API server listens on 127.0.0.1:3001 only (set `HOST=0.0.0.0` to expose it on your network - every game spends your provider key).
 
 ## AI Providers
 
@@ -199,7 +199,7 @@ npm run client   # Vite dev server only
 npm run build    # Production build
 npm run typecheck # Type-check client + server (tsc --noEmit)
 npm test         # Turn-resolver tests (vitest, AI mocked - no API key needed)
-npm start        # Production server
+npm start        # Production server: API + built client (run `npm run build` first) on http://localhost:3001
 ```
 
 ## License
