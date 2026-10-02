@@ -14,8 +14,12 @@
     "test": "vitest run"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Nobler Works (https://noblerworks.com/)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NoblerWorks-HQ/WarGames.git"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.6",
