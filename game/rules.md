@@ -130,8 +130,8 @@ Terrain bonuses:
 
 ## Game Length
 
-- Maximum 20 turns - games are fast and aggressive
-- If no victory by turn 20, highest score wins
+- Event mode: 8 turns by default (`MAX_TURNS`, see `server/config.ts`) - games are fast and aggressive
+- If no victory by the last turn, highest score wins; a shared top score is a draw
 - Score = (territories * 3) + (total resources / 5) + (tech levels * 2)
 
 ## Faction Order Format
@@ -145,8 +145,8 @@ CRITICAL: Factions must respond ONLY in valid JSON. Non-JSON responses are treat
     {"action": "recruit", "type": "infantry", "territory": "alaska"},
     {"action": "research", "tech": "military"}
   ],
-  "reasoning": "Expanding south while building forces"
+  "summary": "Expanding south while building forces"
 }
 ```
 
-Maximum 3 orders per turn. Use territory IDs (snake_case). The `reasoning` field is optional, max 1 sentence.
+Maximum 3 orders per turn. Use territory IDs (snake_case). The `summary` field is one short public sentence.
