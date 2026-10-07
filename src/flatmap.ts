@@ -13,28 +13,35 @@ const FACTION_COLORS: Record<string, string> = {
 
 const NEUTRAL_COLOR = '#555555'
 
-// Map game territories to GeoJSON country names
+// Map game territories (game/initial-world.json ids) to GeoJSON country names.
+// The US is one GeoJSON feature, so it is drawn with "United States (West)";
+// Russia likewise is drawn with Siberia and Belarus stands in for "Russia (West)".
 const TERRITORY_COUNTRIES: Record<string, string[]> = {
-  alaska: ['United States of America'],
-  western_na: ['Canada'],
-  eastern_na: ['Greenland'],
+  alaska: [],
+  western_na: ['United States of America'],
+  eastern_na: ['Canada', 'Greenland'],
   central_america: ['Mexico', 'Guatemala', 'Belize', 'Honduras', 'El Salvador', 'Nicaragua', 'Costa Rica', 'Panama', 'Cuba', 'Jamaica', 'Haiti', 'Dominican Republic', 'Puerto Rico', 'The Bahamas'],
-  amazonia: ['Brazil', 'Venezuela', 'Colombia', 'Guyana', 'Suriname', 'French Guiana', 'Ecuador'],
-  andes: ['Peru', 'Bolivia', 'Chile'],
-  patagonia: ['Argentina', 'Paraguay', 'Uruguay', 'Falkland Islands'],
-  scandinavia: ['Norway', 'Sweden', 'Finland', 'Iceland', 'Denmark'],
-  western_europe: ['France', 'Germany', 'United Kingdom', 'Ireland', 'Belgium', 'Netherlands', 'Luxembourg', 'Switzerland', 'Austria'],
-  eastern_europe: ['Poland', 'Ukraine', 'Belarus', 'Czech Republic', 'Slovakia', 'Hungary', 'Romania', 'Moldova', 'Lithuania', 'Latvia', 'Estonia'],
-  mediterranean: ['Italy', 'Spain', 'Portugal', 'Greece', 'Croatia', 'Albania', 'Montenegro', 'Bosnia and Herzegovina', 'Republic of Serbia', 'Macedonia', 'Slovenia', 'Bulgaria', 'Cyprus', 'Malta'],
+  colombia_venezuela: ['Colombia', 'Venezuela', 'Ecuador'],
+  amazonia: ['Brazil', 'Guyana', 'Suriname', 'French Guiana'],
+  andes: ['Peru', 'Bolivia', 'Chile', 'Argentina', 'Paraguay', 'Uruguay', 'Falkland Islands'],
+  scandinavia: ['Norway', 'Sweden', 'Finland', 'Iceland', 'Denmark', 'Lithuania', 'Latvia', 'Estonia'],
+  western_europe: ['France', 'Germany', 'United Kingdom', 'Ireland', 'Belgium', 'Netherlands', 'Luxembourg', 'Switzerland', 'Austria', 'Italy', 'Spain', 'Portugal'],
+  eastern_europe: ['Poland', 'Czech Republic', 'Slovakia', 'Hungary', 'Romania', 'Moldova', 'Republic of Serbia', 'Croatia', 'Bosnia and Herzegovina', 'Montenegro', 'Albania', 'Macedonia', 'Slovenia', 'Kosovo'],
+  ukraine: ['Ukraine'],
+  mediterranean: ['Turkey', 'Greece', 'Bulgaria', 'Cyprus', 'Northern Cyprus'],
+  western_russia: ['Belarus'],
+  siberia: ['Russia'],
+  middle_east: ['Saudi Arabia', 'Yemen', 'Oman', 'United Arab Emirates', 'Qatar', 'Kuwait', 'Iraq', 'Syria', 'Jordan', 'Israel', 'Lebanon', 'West Bank'],
   north_africa: ['Morocco', 'Algeria', 'Tunisia', 'Libya', 'Egypt', 'Western Sahara', 'Mauritania'],
   central_africa: ['Nigeria', 'Cameroon', 'Chad', 'Central African Republic', 'Democratic Republic of the Congo', 'Republic of the Congo', 'Gabon', 'Equatorial Guinea', 'Niger', 'Mali', 'Burkina Faso', 'Senegal', 'Gambia', 'Guinea', 'Guinea Bissau', 'Sierra Leone', 'Liberia', 'Ivory Coast', 'Ghana', 'Togo', 'Benin', 'Eritrea', 'Djibouti', 'Somalia', 'Somaliland', 'Ethiopia', 'South Sudan', 'Sudan', 'Kenya', 'Uganda', 'Rwanda', 'Burundi', 'United Republic of Tanzania'],
   south_africa: ['South Africa', 'Namibia', 'Botswana', 'Zimbabwe', 'Mozambique', 'Madagascar', 'Zambia', 'Malawi', 'Angola', 'Swaziland', 'Lesotho'],
-  siberia: ['Russia'],
-  central_asia: ['Kazakhstan', 'Uzbekistan', 'Turkmenistan', 'Kyrgyzstan', 'Tajikistan', 'Afghanistan', 'Iran', 'Iraq', 'Syria', 'Turkey', 'Georgia', 'Armenia', 'Azerbaijan', 'Saudi Arabia', 'Yemen', 'Oman', 'United Arab Emirates', 'Qatar', 'Kuwait', 'Jordan', 'Israel', 'Lebanon', 'West Bank', 'Northern Cyprus'],
+  central_asia: ['Kazakhstan', 'Uzbekistan', 'Turkmenistan', 'Kyrgyzstan', 'Tajikistan', 'Afghanistan', 'Georgia', 'Armenia', 'Azerbaijan'],
+  iran: ['Iran'],
+  pakistan: ['Pakistan'],
+  india: ['India', 'Bangladesh', 'Nepal', 'Bhutan', 'Sri Lanka'],
   east_asia: ['China', 'Japan', 'South Korea', 'North Korea', 'Mongolia', 'Taiwan'],
-  south_asia: ['India', 'Pakistan', 'Bangladesh', 'Nepal', 'Bhutan', 'Sri Lanka', 'Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam'],
-  indonesia: ['Indonesia', 'Malaysia', 'Philippines', 'Papua New Guinea', 'Brunei', 'East Timor', 'Solomon Islands', 'New Caledonia', 'Vanuatu', 'Fiji'],
-  australia: ['Australia', 'New Zealand']
+  southeast_asia: ['Myanmar', 'Thailand', 'Laos', 'Cambodia', 'Vietnam', 'Indonesia', 'Malaysia', 'Philippines', 'Papua New Guinea', 'Brunei', 'East Timor'],
+  australia: ['Australia', 'New Zealand', 'Solomon Islands', 'New Caledonia', 'Vanuatu', 'Fiji']
 }
 
 // Reverse lookup: country name -> territory ID
