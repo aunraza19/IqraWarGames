@@ -16,7 +16,7 @@ A fresher-week edition of [War Games](https://github.com/NoblerWorks-HQ/WarGames
 ## How a game goes
 
 1. **Start screen** - enter a commander name (optional), choose **NATO**, **Russia** or **China**, press **BEGIN**. The roster shows `YOU` for your faction and `AI` for the other two.
-2. **Your orders** - each turn, type what you want in the box under the map and press **EXECUTE ORDERS** (or Enter). Example chips and an "available now" hint help first-time players.
+2. **Your orders** - each turn, type what you want in the box under the map and press **EXECUTE ORDERS** (or Enter). Not sure what to type? The **Action Assistant** below the box suggests 4-5 actions you can take right now, and **ALL ACTIONS** opens every action in the game - what it does, whether you can use it this turn (and why not), and example orders. Clicking an example only writes it into the box, so you can edit it, combine several, then execute.
 3. **AI interpretation** - the interpreter reads your faction's current briefing and maps your intent to up to 3 legal orders (the same limit the AI factions have). Impossible parts ("send aliens", "launch nukes" without warheads) are replaced with the closest legal action or dropped, with a short note.
 4. **Resolution** - the two AI factions plan from the same snapshot of the board; the engine resolves all three factions' orders, the map animates, and a turn report shows what worked (✓) and what didn't (✕).
 5. **Next turn** - nothing happens until you act. There is no timer.
@@ -82,6 +82,7 @@ Other event settings (500-character command limit, 3 orders per turn, name lengt
 - **The model proposes, the engine decides.** The interpreter returns JSON constrained by a per-turn schema: one variant per action, and every id field is an enum of the ids your faction may use this turn. The server then validates every order again ([`server/orders.ts`](server/orders.ts)): your own units only, real territories, adjacency, ownership, tech requirements, costs counted across all your orders, one order per unit, at most 3 orders. Invalid orders are dropped with a reason; the rest still execute.
 - **Your command is untrusted text.** It is fenced off in the prompt and the interpreter is told it cannot change rules, reveal prompts or keys, grant anything, or act for another faction. Even if a model obeyed an injection, the validator would still refuse anything illegal.
 - **Nuclear weapons** follow the existing engine rules (research, build, range, second strike). The interpreter only uses them when the player explicitly asks.
+- **The Action Assistant is help, not a second control system.** Its list of actions is built from the engine's own action set, availability is checked with the same validator the interpreter's orders must pass, and every button just writes plain English into the orders box. It makes no model call; nuclear actions are never suggested and only appear under Nuclear / Advanced.
 - **No hidden reasoning is shown.** Models return a one-sentence public summary, not chain-of-thought.
 - **Nothing a model writes is executed or rendered as HTML.** Player names, commands and model text are displayed as plain text.
 
@@ -143,7 +144,8 @@ server/
   http.ts          - origin check and request validation
   config.ts        - event settings (turns, limits, timeouts)
   engine.ts        - game session, turn lifecycle, resolver, combat, victory
-  orders.ts        - order normalisation and legality checks, available-action hints
+  orders.ts        - order normalisation and legality checks
+  assistant.ts     - Action Assistant: action catalogue, availability, lock reasons, suggestions
   ai.ts            - interpreter and AI-opponent calls, response schemas, JSON parsing
   ai-provider.ts   - Gemini / OpenAI / Anthropic behind one generate() call
   retry.ts         - bounded retry with backoff
@@ -156,6 +158,7 @@ server/
 src/
   main.ts          - UI controller: start screen, orders, reports, end screen
   leaderboard.ts   - localStorage leaderboard
+  prompt.ts        - how an Action Assistant example is inserted into the orders box
   flatmap.ts       - Leaflet map and territory overlays
   effects/         - map and screen animations
   style.css

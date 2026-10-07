@@ -84,6 +84,35 @@ Visibility note: the interpreter (like the AI factions) only receives the human 
 fogged briefing. The **UI** shows the whole board and all three factions' stats, as the
 original spectator UI did - the map is the centrepiece of the event.
 
+## Action Assistant
+
+Beginner help around the orders box (`server/assistant.ts`, rendered by `src/main.ts`).
+It never sends an order: every button writes a plain-English example into the textarea
+(`src/prompt.ts`: fill if empty, otherwise append as the next sentence, never duplicate,
+never exceed the length cap), and the player still presses EXECUTE ORDERS, so the text goes
+through the interpreter like anything typed by hand.
+
+- **Catalogue** - `ACTION_HELP` is a `Record<OrderAction, ActionHelp>`, so every action the
+  engine resolves must have a label, icon, category, one-sentence description and example
+  prompts, and nothing else can be listed. Descriptions follow what `engine.ts` actually
+  does (spy only costs influence; sending resources is one-way; alliances need both sides).
+  `assistant.test.ts` also checks each action against the resolver and the interpreter schema.
+- **Availability** - each action is proven possible by running candidate orders through
+  `validateOrders()` against the current state; lock reasons ("Needs 2 iron (you have 0).",
+  "Research nuclear technology first.") come from the same rule constants. Recruit and
+  Research also lock per unit type / tech track.
+- **Contextual examples** - where a legal target exists, the first example names it by
+  display name ("Attack Ukraine with the strongest unit that can reach it."). No ids.
+- **Suggestions** - `getSuggestedActions()` picks up to 5 available actions in a fixed
+  priority (attack, recruit, fortify, research, move, mercenaries, alliance, message). Nuclear
+  actions, breaking an alliance, spying and giving resources away are never suggested.
+- **Served as** `session.assistant` in `GET /api/state` while it is the player's turn. It is
+  computed from state on each request: zero model calls.
+
+To add an action: add it to `ORDER_ACTIONS`, the resolver, `validateOrders()`, the schema in
+`ai.ts` and `ACTION_HELP` (TypeScript will insist), plus its availability case in
+`buildActionAssistant()`.
+
 ## AI opponents
 
 `getOpponentOrders()` sends the faction's persona (`game/factions/<id>.md`) as the system
@@ -133,6 +162,7 @@ not retried. `onRetry` sets the session's `aiStatus` to `retrying`, which the UI
 | Interpreter behaviour | `INTERPRETER_SYSTEM` in `server/ai.ts` |
 | Fallback / quick-strategy behaviour | `PLANS`, `RESEARCH_PREFERENCE`, `FALLBACK_FOCUS` in `server/fallback.ts` |
 | Leaderboard score formula | `server/scoring.ts` |
+| Action descriptions, example prompts, strategy ideas, suggestion order | `ACTION_HELP`, `STRATEGY_IDEAS`, `SUGGESTION_PRIORITY` in `server/assistant.ts` |
 | Starting map, units, resources | `game/initial-world.json` |
 | Unit stats and costs | `server/rules.ts` (keep `game/rules.md` in step) |
 
