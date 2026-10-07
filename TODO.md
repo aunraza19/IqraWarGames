@@ -18,6 +18,21 @@ Fleet audit follow-up; all fixed on main 2026-10-02 (local app, nothing to deplo
 - [x] 2026-10-02 medium - `npm start` served no client (`server/index.ts`) - serves `dist/` with SPA fallback when built.
 - [x] 2026-10-02 low - package.json said ISC, LICENSE is MIT - now MIT + author + repository.
 
+## Human vs AI follow-ups (2026-10-07)
+
+- [ ] `@google/generative-ai` (0.24) is Google's legacy SDK, superseded by `@google/genai`. It
+      works (structured output, systemInstruction, retry info) and was left in place to avoid
+      mixing a provider migration into the gameplay change; migrate only `server/ai-provider.ts`.
+- [ ] `npm audit` (2026-10-07): runtime advisories are all transitive Express deps
+      (proxy-addr, qs, path-to-regexp, body-parser) with non-breaking fixes via `npm audit fix`;
+      the server binds to 127.0.0.1 and does not use `trust proxy`. Dev-only advisories (vite,
+      vitest/tinypool, concurrently/shell-quote, esbuild, postcss) need major upgrades
+      (`--force`). Apply the non-breaking fix deliberately, re-test, commit separately.
+- [ ] `game/rules.md` still describes the older 20-territory map and unit names (Cavalry,
+      Siege); the enforced numbers are in `server/rules.ts` / `engine.ts`.
+- [ ] Factions are asymmetric (NATO starts far ahead); the leaderboard is per faction because
+      of it. Consider event balancing if Russia/China players rarely win.
+
 ## 🟡 Refactor survey (2026-09-18)
 
 Found by a read-only survey of the repo on 2026-09-18; none was tracked before. Ranked by payoff for the effort. 🟠 = a real bug or risk, not only tidiness.
@@ -68,8 +83,10 @@ Found by a read-only survey of the repo on 2026-09-18; none was tracked before. 
 
 ## 🟡 Cost and abuse surface
 
-- [ ] Every turn calls the provider four times (three factions + narrator) every 10-15
-      seconds, with no token ceiling and no cost estimate anywhere in the docs. Document the
+- [x] ~~Every turn calls the provider four times (three factions + narrator) every 10-15
+      seconds~~ ✅ 2026-10-07 Human vs AI: no timer, no narrator call; a turn is at most 3
+      calls (interpreter + 2 AI) and only when the player submits. Per-turn counts are logged
+      and asserted in `server/turn.test.ts`. Still open: no token ceiling / cost estimate. Document the
       per-game cost of the default Gemini config in README "Cost Controls".
       (2026-09-18: the turn cap already exists - `maxTurns: 20` in `game/initial-world.json`,
       enforced at `server/engine.ts:335`, and the interval stops itself at `engine.ts:76`, so
@@ -84,8 +101,9 @@ Found by a read-only survey of the repo on 2026-09-18; none was tracked before. 
 
 ## 🟢 Game and docs
 
-- [ ] Factions are named after real sitting heads of state. Fine for a satire piece, worth
-      a deliberate decision rather than an inherited one now that the repo is public.
+- [x] ~~Factions are named after real sitting heads of state.~~ ✅ 2026-10-07 personas are
+      NATO / Russian / Chinese Command; the narrator (which named leaders) is gone. Faction
+      display names in `initial-world.json` are unchanged.
 - [x] ~~`game/rules.md` and `game/tech-tree.json` are not referenced from the README, so the
       moddable parts of the game are effectively undiscoverable.~~ ✅ 2026-09-18 README "Modding the game" section links all of game/
 - [x] ~~Nuclear exchange is in the action list and in the screenshots but has no documented
