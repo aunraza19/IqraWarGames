@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { GameState, Unit, Order, FactionOrders, TurnResult, GameEvent, ChatMessage, ModelCallCount, OrderSource, HumanTurnRecord } from './types.js'
-import { getOpponentOrders, interpretCommand } from './ai.js'
+import { getOpponentOrders, interpretCommand, type OrderVocabulary } from './ai.js'
 import { FACTION_IDS, GAME_CONFIG, type FactionId } from './config.js'
 import { availableActions, cleanText, describeOrder, factionLabel, validateOrders } from './orders.js'
 import { FALLBACK_FOCUS, planFallbackOrders, type StrategyFocus } from './fallback.js'
@@ -333,6 +333,15 @@ export class GameEngine {
     return Array.from(visible)
   }
 
+  /** Ids a faction's model reply may use: its own units, every territory, the other factions. */
+  private vocabulary(factionId: string): OrderVocabulary {
+    return {
+      units: this.state.factions[factionId].units.map((u) => u.id),
+      territories: Object.keys(this.state.map.territories),
+      factions: FACTION_IDS.filter((f) => f !== factionId),
+    }
+  }
+
   private snapshot(): Snapshot {
     return {
       state: structuredClone(this.state),
@@ -572,7 +581,7 @@ export class GameEngine {
         const briefing = this.buildBriefing(fid)
         calls.opponents++
         try {
-          const o = await getOpponentOrders(fid, personas[fid], briefing, onRetry)
+          const o = await getOpponentOrders(fid, personas[fid], briefing, this.vocabulary(fid), onRetry)
           console.log(`[turn ${turn}] ${fid} (AI): ${o.orders.length} orders`)
           return [fid, { ...o, source: 'ai' }]
         } catch (err) {
@@ -589,7 +598,7 @@ export class GameEngine {
       } else {
         calls.interpreter++
         const names = Object.fromEntries(Object.entries(frozen.map.territories).map(([id, t]) => [id, t.name]))
-        humanJob = interpretCommand(human, this.buildBriefing(human), names, req.command ?? '', onRetry)
+        humanJob = interpretCommand(human, this.buildBriefing(human), names, req.command ?? '', this.vocabulary(human), onRetry)
           .then((i): HumanJob => ({ ok: true, ...i }))
           .catch((err): HumanJob => ({ ok: false, error: err instanceof Error ? err.message : String(err) }))
       }
