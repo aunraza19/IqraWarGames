@@ -102,11 +102,9 @@ export class FlatMap {
       keyboard: false
     })
 
-    // Dark tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      noWrap: true
-    }).addTo(this.map)
+    // No tile server: CartoDB's keyless basemap now serves "API KEY REQUIRED"
+    // tiles, and a booth should not depend on a third-party CDN anyway. Every
+    // country is drawn from the local public/countryborders.json instead.
 
     // Fill container edge-to-edge
     this.fitMapToContainer()
@@ -183,6 +181,11 @@ export class FlatMap {
       const geojson = (await res.json()) as CountryGeoJSON
       this.fixAntimeridian(geojson)
       this.geojsonData = geojson
+      // Land base layer under the territory colours (drawn first, never re-styled).
+      L.geoJSON(geojson, {
+        interactive: false,
+        style: { fillColor: '#24262c', fillOpacity: 1, color: '#33363f', weight: 0.6, opacity: 1 }
+      }).addTo(this.map)
       // Re-render if state arrived before GeoJSON loaded
       if (this.pendingState) {
         this.render(this.pendingState)
@@ -248,20 +251,19 @@ export class FlatMap {
     for (let i = 0; i < this.activeBlasts.length; i++) {
       const blast = this.activeBlasts[i]
       const age = this.animFrame - blast.startTime
-      const duration = 180 // frames
+      const t = Math.min(1, age / blast.duration)
 
-      const t = age / duration
-      const scale = 1 + t * 15
-
-      // Expand ring
-      blast.ring.setRadius(scale * 50000)
+      // Expand ring. circleMarker radii are pixels: the old meter-scale values
+      // (50,000+) made every combat paint the whole map white until it expired.
+      blast.ring.setRadius(10 + t * blast.reach)
       blast.ring.setStyle({ opacity: Math.max(0, 1 - t), fillOpacity: Math.max(0, 0.3 - t * 0.3) })
 
-      // Flash fades
-      blast.flash.setRadius(Math.max(10000, 80000 * (1 - t)))
-      blast.flash.setStyle({ opacity: Math.max(0, 1 - t * 1.5) })
+      // Flash shrinks and fades - fill included
+      const flashFade = Math.max(0, 1 - t * 1.5)
+      blast.flash.setRadius(Math.max(1, blast.reach * 0.35 * (1 - t)))
+      blast.flash.setStyle({ opacity: flashFade, fillOpacity: 0.8 * flashFade })
 
-      if (age > duration) {
+      if (age > blast.duration) {
         try {
           this.arcLayer.removeLayer(blast.ring)
           this.arcLayer.removeLayer(blast.flash)

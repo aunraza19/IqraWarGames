@@ -7,6 +7,10 @@ export interface NukeBlast {
   ring: L.CircleMarker
   flash: L.CircleMarker
   startTime: number
+  /** How far the shockwave ring grows, in screen pixels (circleMarker radii are pixels). */
+  reach: number
+  /** Frames the blast lasts. */
+  duration: number
 }
 
 // A self-contained in-place animation. FlatMap calls update(t) every frame

@@ -59,7 +59,9 @@ export function spawnNukeBlast(host: EffectHost, pos: LatLng) {
   host.addBlast({
     ring,
     flash,
-    startTime: host.frame()
+    startTime: host.frame(),
+    reach: 260,
+    duration: 180
   })
 
   // Delayed second ring
@@ -67,7 +69,9 @@ export function spawnNukeBlast(host: EffectHost, pos: LatLng) {
     host.addBlast({
       ring: ring2,
       flash: L.circleMarker(pos, { radius: 0, opacity: 0, fillOpacity: 0 }).addTo(host.layer),
-      startTime: host.frame()
+      startTime: host.frame(),
+      reach: 360,
+      duration: 180
     })
   }, 200)
 
@@ -99,7 +103,9 @@ export function spawnCombatImpact(host: EffectHost, pos: LatLng, color: string) 
   host.addBlast({
     ring,
     flash,
-    startTime: host.frame()
+    startTime: host.frame(),
+    reach: 55,
+    duration: 60
   })
 
   triggerCombatScreenEffects()
@@ -150,6 +156,8 @@ export function spawnCaptureImpact(host: EffectHost, pos: LatLng, color: string)
   host.addBlast({
     ring,
     flash: ring2,
-    startTime: host.frame()
+    startTime: host.frame(),
+    reach: 45,
+    duration: 70
   })
 }
