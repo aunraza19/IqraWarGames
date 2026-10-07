@@ -3,18 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WORLD WAR III - Global Conflict Simulation</title>
+  <title>WAR GAMES - Human vs AI</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%234caf50' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%234caf50'/%3E%3C/svg%3E">
 </head>
 <body>
   <div id="app">
     <!-- Header -->
     <div id="header">
-      <div class="logo">WORLD WAR III</div>
+      <div class="logo">WAR GAMES <span class="logo-sub">HUMAN vs AI</span></div>
       <div class="header-stats">
         <div class="stat">
           <div class="stat-label">Turn</div>
-          <div class="stat-value" id="turn-counter">0 / 100</div>
+          <div class="stat-value" id="turn-counter">-</div>
         </div>
+        <div class="stat roster" id="roster" aria-label="Who controls each faction"></div>
         <div class="stat">
           <div class="stat-label">Status</div>
           <div class="stat-value" id="game-status" style="color: #888">WAITING</div>
@@ -25,22 +27,58 @@
         </div>
       </div>
       <div class="controls">
-        <button class="btn btn-start" id="btn-start">START</button>
-        <button class="btn btn-stop hidden" id="btn-stop">STOP</button>
-        <button class="btn btn-reset" id="btn-reset">RESET</button>
+        <button class="btn btn-reset" id="btn-reset" type="button">NEW GAME</button>
       </div>
     </div>
 
-    <!-- Globe Map -->
+    <!-- Map + command dock -->
     <div id="main">
-      <div id="globe-container"></div>
+      <div id="map-wrap">
+        <div id="globe-container"></div>
+      </div>
 
-      <!-- Bottom bar overlays the map -->
-      <div id="bottom-bar">
-        <div class="panel chat-panel">
+      <div id="command-dock">
+        <!-- The player's orders -->
+        <section class="panel command-panel" id="command-panel" aria-labelledby="command-title">
+          <div class="command-head">
+            <div class="command-title" id="command-title">YOUR ORDERS</div>
+            <div class="command-turn" id="command-turn"></div>
+          </div>
+
+          <form id="command-form" autocomplete="off">
+            <label class="sr-only" for="command-input">What are your orders?</label>
+            <textarea id="command-input" rows="2" maxlength="500"
+              placeholder="What are your orders? e.g. Attack the weakest nearby territory, recruit infantry, and improve military tech."></textarea>
+            <div class="command-row">
+              <div class="chips" id="command-chips" aria-label="Example orders"></div>
+              <div class="command-actions">
+                <span class="char-count" id="char-count">0 / 500</span>
+                <button class="btn btn-execute" id="btn-execute" type="submit">EXECUTE ORDERS</button>
+              </div>
+            </div>
+            <div class="available" id="available-actions"></div>
+          </form>
+
+          <div class="command-status hidden" id="command-status" role="status" aria-live="polite"></div>
+          <div class="command-notice hidden" id="command-notice" role="alert"></div>
+          <div class="quick-strategies hidden" id="quick-strategies">
+            <div class="quick-title">QUICK STRATEGY (no AI interpreter needed)</div>
+            <div class="quick-buttons">
+              <button class="btn" type="button" data-quick="aggressive">AGGRESSIVE PUSH</button>
+              <button class="btn" type="button" data-quick="defensive">HOLD THE LINE</button>
+              <button class="btn" type="button" data-quick="economic">BUILD ECONOMY</button>
+              <button class="btn" type="button" data-quick="balanced">BALANCED</button>
+            </div>
+          </div>
+
+          <div class="turn-report hidden" id="turn-report"></div>
+        </section>
+
+        <!-- Intelligence feed -->
+        <section class="panel chat-panel intel-panel">
           <div class="panel-title">Intelligence Feed</div>
           <div class="chat-scroll" id="intel-feed"></div>
-        </div>
+        </section>
       </div>
     </div>
 
@@ -49,7 +87,7 @@
       <!-- NATO -->
       <div class="panel faction-panel nato" id="faction-nato">
         <div class="faction-header">
-          <div class="faction-name" style="color: var(--nato)">USA / NATO</div>
+          <div class="faction-name" style="color: var(--nato)">NATO <span class="f-badge"></span></div>
           <div class="faction-score" style="color: var(--nato)"><span class="f-score">0</span> pts</div>
         </div>
         <div class="faction-stats">
@@ -79,7 +117,7 @@
       <!-- Russia -->
       <div class="panel faction-panel russia" id="faction-russia">
         <div class="faction-header">
-          <div class="faction-name" style="color: var(--russia)">Russia</div>
+          <div class="faction-name" style="color: var(--russia)">RUSSIA <span class="f-badge"></span></div>
           <div class="faction-score" style="color: var(--russia)"><span class="f-score">0</span> pts</div>
         </div>
         <div class="faction-stats">
@@ -109,7 +147,7 @@
       <!-- China -->
       <div class="panel faction-panel china" id="faction-china">
         <div class="faction-header">
-          <div class="faction-name" style="color: var(--china)">China</div>
+          <div class="faction-name" style="color: var(--china)">CHINA <span class="f-badge"></span></div>
           <div class="faction-score" style="color: var(--china)"><span class="f-score">0</span> pts</div>
         </div>
         <div class="faction-stats">
@@ -143,16 +181,41 @@
       </div>
     </div>
 
-    <!-- Hidden chat targets for existing JS -->
-    <div style="display:none">
-      <div id="chat-nato"></div>
-      <div id="chat-russia"></div>
-      <div id="chat-china"></div>
-    </div>
   </div>
 
   <!-- Territory capture toasts -->
   <div id="capture-toasts"></div>
+
+  <!-- Start screen: choose a faction -->
+  <div id="setup-screen" class="setup-screen hidden">
+    <div class="setup-card">
+      <div class="setup-title">WAR GAMES</div>
+      <div class="setup-subtitle">HUMAN vs AI</div>
+      <p class="setup-tagline">Choose your faction. Command it in plain English. Outthink two autonomous AI opponents.</p>
+
+      <form id="setup-form" autocomplete="off">
+        <label class="setup-label" for="player-name">Commander name</label>
+        <input id="player-name" type="text" maxlength="24" placeholder="Commander" spellcheck="false">
+
+        <div class="setup-label" id="faction-choice-label">Choose your faction</div>
+        <div class="faction-cards" id="faction-cards" role="radiogroup" aria-labelledby="faction-choice-label"></div>
+
+        <div class="setup-roster" id="setup-roster" aria-live="polite"></div>
+
+        <button class="btn btn-begin" id="btn-begin" type="submit" disabled>BEGIN</button>
+        <div class="setup-error hidden" id="setup-error" role="alert"></div>
+      </form>
+
+      <div class="leaderboard" id="leaderboard">
+        <div class="leaderboard-head">
+          <div class="setup-label">Leaderboard</div>
+          <div class="lb-tabs" id="lb-tabs" role="tablist"></div>
+        </div>
+        <ol class="lb-list" id="lb-list"></ol>
+        <button class="lb-clear" id="lb-clear" type="button" title="Organisers: clear all scores">clear scores</button>
+      </div>
+    </div>
+  </div>
 
   <!-- End-of-game summary modal -->
   <div id="game-summary-modal" class="summary-modal hidden">

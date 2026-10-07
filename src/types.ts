@@ -68,6 +68,7 @@ export interface GameState {
     diplomatic: { alliancesRequired: number; turnsRequired: number }
   }
   recentEvents?: GameEvent[]
+  session?: Session
 }
 
 export interface ChatMessage {
@@ -77,4 +78,66 @@ export interface ChatMessage {
   agentName: string
   channel: string
   message: string
+}
+
+export type FactionId = 'nato' | 'russia' | 'china'
+export type GamePhase = 'setup' | 'waiting_for_player' | 'processing_turn' | 'finished'
+export type OrderSource = 'human' | 'quick' | 'ai' | 'fallback'
+
+export interface ReportLine {
+  ok: boolean
+  text: string
+}
+
+export interface FactionReport {
+  faction: FactionId
+  label: string
+  controller: OrderSource
+  summary: string
+  lines: ReportLine[]
+}
+
+export interface TurnReport {
+  turn: number
+  headline: string
+  factions: FactionReport[]
+}
+
+/** The Human vs AI session, as served by GET /api/state. */
+export interface Session {
+  gameId: string | null
+  phase: GamePhase
+  humanFaction: FactionId | null
+  playerName: string
+  turn: number
+  maxTurns: number
+  maxCommandLength: number
+  maxOrdersPerTurn: number
+  aiStatus: 'idle' | 'thinking' | 'retrying'
+  outcome: 'victory' | 'defeat' | 'draw' | null
+  finalScore: number | null
+  availableActions: string[]
+  lastReport: TurnReport | null
+}
+
+/** Body of a successful POST /api/player-command. */
+export interface CommandResponse {
+  status: 'resolved'
+  turn: number
+  interpretation: string
+  warnings: string[]
+  accepted: string[]
+  rejected: string[]
+  report: TurnReport
+  session: Session
+}
+
+/** Body of a refused POST /api/player-command. */
+export interface CommandError {
+  error: string
+  code: string
+  degraded?: boolean
+  interpretation?: string
+  warnings?: string[]
+  rejected?: string[]
 }
