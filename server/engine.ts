@@ -801,8 +801,12 @@ export class GameEngine {
             return this.resolveMercenaryCombat(factionId, unit, attackTarget)
           }
           unit.territory = attackTarget
-          if (territory && territory.owner !== factionId) territory.owner = factionId
           const tName = territory?.name || attackTarget
+          // An AI "attack" into its own empty territory is just a move - do not report a capture.
+          if (territory?.owner === factionId) {
+            return { type: 'move', faction: factionId, description: `${fName} moves unit to ${tName}`, from: attackFrom, to: attackTarget }
+          }
+          if (territory) territory.owner = factionId
           return { type: 'capture', faction: factionId, description: `${fName} takes undefended ${tName}`, from: attackFrom, to: attackTarget }
         }
 

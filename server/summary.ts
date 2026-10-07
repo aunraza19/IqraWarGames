@@ -37,9 +37,16 @@ export function actorOf(event: GameEvent): string {
   return typeof actor === 'string' ? actor : event.faction
 }
 
+/** Engine text uses full faction names ("People's Republic of China"); reports use the short label. */
+function shortNames(state: GameState, text: string): string {
+  let out = text
+  for (const [id, f] of Object.entries(state.factions)) out = out.split(f.name).join(factionLabel(id))
+  return out
+}
+
 function eventLine(state: GameState, event: GameEvent, actor: string): ReportLine | null {
   const fName = state.factions[actor]?.name ?? actor
-  const text = humanize(state, event.description.startsWith(`${fName}: `) ? event.description.slice(fName.length + 2) : event.description)
+  const text = shortNames(state, humanize(state, event.description.startsWith(`${fName}: `) ? event.description.slice(fName.length + 2) : event.description))
   switch (event.type) {
     case 'forfeit':
       return null
@@ -57,6 +64,7 @@ function captured(state: GameState, events: GameEvent[], actor: string): string[
   return events
     .filter((e) => actorOf(e) === actor && e.to && (e.type === 'capture' || (e.type === 'combat' && e.faction === actor && e.from)))
     .map((e) => state.map.territories[e.to!]?.name ?? e.to!)
+    .filter((name, i, all) => all.indexOf(name) === i)
 }
 
 function stalled(events: GameEvent[], actor: string): boolean {
