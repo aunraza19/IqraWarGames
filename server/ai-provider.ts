@@ -8,14 +8,33 @@
  *   NATO_AI_PROVIDER=anthropic
  *   RUSSIA_AI_PROVIDER=gemini
  *   CHINA_AI_PROVIDER=openai
- *   NARRATOR_AI_PROVIDER=anthropic
+ *   INTERPRETER_AI_PROVIDER=anthropic   (the human command interpreter)
  *
  * Each provider needs its corresponding API key set:
  *   GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY
  */
 
-import type { GoogleGenerativeAI } from '@google/generative-ai'
+import type { GoogleGenerativeAI, ResponseSchema } from '@google/generative-ai'
 import { httpError, withRetry } from './retry.js'
+import { GAME_CONFIG } from './config.js'
+
+/**
+ * JSON schema for a structured reply, in the OpenAPI subset Gemini accepts
+ * (type / properties / items / enum / required). Gemini enforces it server-side;
+ * OpenAI gets JSON mode and Anthropic gets the instruction only, so callers
+ * must still parse and validate the reply.
+ */
+export type JsonSchema = Record<string, unknown>
+
+export interface GenerateOptions {
+  /** System instruction, kept separate from untrusted prompt content where the provider supports it. */
+  system?: string
+  /** Ask for a JSON reply matching this schema. */
+  schema?: JsonSchema
+  temperature?: number
+  /** Called before each retry (429 / 5xx / network), e.g. to show "network busy" in the UI. */
+  onRetry?: (attempt: number, delayMs: number) => void
+}
 
 export interface AIProvider {
   name: string
@@ -25,7 +44,7 @@ export interface AIProvider {
   modelEnvVar: string
   /** Env var holding the API key - named in startup errors. */
   keyEnvVar: string
-  generate(prompt: string): Promise<string>
+  generate(prompt: string, opts?: GenerateOptions): Promise<string>
   /**
    * Ask the provider whether `model` exists. One cheap metadata GET, no tokens
    * spent. Called once at server boot by validateProviders(), never per turn.
@@ -99,22 +118,29 @@ function createGeminiProvider(): AIProvider {
     model: modelId,
     modelEnvVar: 'GEMINI_MODEL',
     keyEnvVar: 'GEMINI_API_KEY',
-    async generate(prompt: string): Promise<string> {
+    async generate(prompt: string, opts: GenerateOptions = {}): Promise<string> {
       if (!client) {
         const { GoogleGenerativeAI } = await import('@google/generative-ai')
         client = new GoogleGenerativeAI(key)
       }
       const model = client.getGenerativeModel({
         model: modelId,
+        ...(opts.system ? { systemInstruction: opts.system } : {}),
         generationConfig: {
-          maxOutputTokens: 8192,
-          temperature: 0.7,
+          maxOutputTokens: 2048,
+          temperature: opts.temperature ?? 0.7,
+          ...(opts.schema
+            ? { responseMimeType: 'application/json', responseSchema: opts.schema as unknown as ResponseSchema }
+            : {}),
           ...(thinkingConfig ? { thinkingConfig } : {}),
         },
       })
       // 429/5xx are retried with backoff (server/retry.ts); the SDK error carries `status`.
-      const result = await withRetry('gemini', () =>
-        withTimeout(model.generateContent(prompt), 15000, 'gemini')
+      // text() throws when the reply was blocked (safety) - not retried, the caller falls back.
+      const result = await withRetry(
+        'gemini',
+        () => withTimeout(model.generateContent(prompt), GAME_CONFIG.aiRequestTimeoutMs, 'gemini'),
+        { onRetry: opts.onRetry }
       )
       return result.response.text().trim()
     },
@@ -155,7 +181,7 @@ function createOpenAIProvider(): AIProvider {
     model,
     modelEnvVar: 'OPENAI_MODEL',
     keyEnvVar: 'OPENAI_API_KEY',
-    async generate(prompt: string): Promise<string> {
+    async generate(prompt: string, opts: GenerateOptions = {}): Promise<string> {
       return withRetry('openai', async () => {
         const res = await withTimeout(
           fetch(`${baseUrl}/chat/completions`, {
@@ -166,17 +192,21 @@ function createOpenAIProvider(): AIProvider {
             },
             body: JSON.stringify({
               model,
-              messages: [{ role: 'user', content: prompt }],
+              messages: [
+                ...(opts.system ? [{ role: 'system', content: opts.system }] : []),
+                { role: 'user', content: prompt },
+              ],
+              ...(opts.schema ? { response_format: { type: 'json_object' } } : {}),
               ...tuning,
             }),
           }),
-          15000,
+          GAME_CONFIG.aiRequestTimeoutMs,
           'openai'
         )
         if (!res.ok) throw await httpError('OpenAI', res)
         const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
         return (data.choices?.[0]?.message?.content || '').trim()
-      })
+      }, { onRetry: opts.onRetry })
     },
     async checkModel() {
       const result = await fetchModelCheck(`${baseUrl}/models/${encodeURIComponent(model)}`, {
@@ -210,7 +240,7 @@ function createAnthropicProvider(): AIProvider {
     model,
     modelEnvVar: 'ANTHROPIC_MODEL',
     keyEnvVar: 'ANTHROPIC_API_KEY',
-    async generate(prompt: string): Promise<string> {
+    async generate(prompt: string, opts: GenerateOptions = {}): Promise<string> {
       return withRetry('anthropic', async () => {
         const res = await withTimeout(
           fetch('https://api.anthropic.com/v1/messages', {
@@ -223,18 +253,19 @@ function createAnthropicProvider(): AIProvider {
             body: JSON.stringify({
               model,
               max_tokens: 4096,
+              ...(opts.system ? { system: opts.system } : {}),
               messages: [{ role: 'user', content: prompt }],
               ...thinking,
             }),
           }),
-          15000,
+          GAME_CONFIG.aiRequestTimeoutMs,
           'anthropic'
         )
         if (!res.ok) throw await httpError('Anthropic', res)
         const data = (await res.json()) as { content?: { type: string; text?: string }[] }
         const textBlock = data.content?.find(b => b.type === 'text')
         return (textBlock?.text || '').trim()
-      })
+      }, { onRetry: opts.onRetry })
     },
     checkModel() {
       return fetchModelCheck(`https://api.anthropic.com/v1/models/${encodeURIComponent(model)}`, {
@@ -267,10 +298,11 @@ function createProvider(providerName: string): AIProvider {
 }
 
 /**
- * Get the AI provider for a given role (faction or narrator).
+ * Get the AI provider for a given role (an AI faction, or "interpreter" for the
+ * human command interpreter).
  *
  * Resolution order:
- *   1. Per-role env var: NATO_AI_PROVIDER, RUSSIA_AI_PROVIDER, CHINA_AI_PROVIDER, NARRATOR_AI_PROVIDER
+ *   1. Per-role env var: NATO_AI_PROVIDER, RUSSIA_AI_PROVIDER, CHINA_AI_PROVIDER, INTERPRETER_AI_PROVIDER
  *   2. Global fallback: AI_PROVIDER (defaults to "gemini")
  *
  * Providers are cached - same provider name reuses the same instance.
@@ -297,7 +329,7 @@ export function getProvider(role?: string): AIProvider {
   return provider
 }
 
-const ROLES = ['nato', 'russia', 'china', 'narrator']
+const ROLES = ['nato', 'russia', 'china', 'interpreter']
 
 /**
  * Validate every provider the game will use, once, at server boot.

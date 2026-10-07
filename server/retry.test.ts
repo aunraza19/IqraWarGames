@@ -3,7 +3,7 @@
  * the backoff schedule is asserted without actually waiting.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { isRetryable, parseRetryAfter, ProviderHttpError, retryDefaults, withRetry } from './retry.js'
+import { isRetryable, parseRetryAfter, ProviderHttpError, retryDefaults, retryHintMs, withRetry } from './retry.js'
 
 const realSleep = retryDefaults.sleep
 let slept: number[] = []
@@ -89,10 +89,24 @@ describe('provider calls (mocked fetch)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('honours Retry-After, capped at maxDelayMs', async () => {
-    fetchSequence(json({}, 429, { 'retry-after': '3' }), json({}, 429, { 'retry-after': '120' }), openaiOk())
+  it('honours a short Retry-After', async () => {
+    fetchSequence(json({}, 429, { 'retry-after': '3' }), openaiOk())
     await (await provider('openai')).generate('hi')
-    expect(slept).toEqual([3000, retryDefaults.maxDelayMs])
+    expect(slept).toEqual([3000])
+  })
+
+  it('gives up at once when Retry-After is longer than maxDelayMs (quota exhausted)', async () => {
+    const fetchMock = fetchSequence(json({}, 429, { 'retry-after': '3' }), json({}, 429, { 'retry-after': '120' }), openaiOk())
+    await expect((await provider('openai')).generate('hi')).rejects.toThrow(/429/)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(slept).toEqual([3000])
+  })
+
+  it('reports each retry through onRetry', async () => {
+    fetchSequence(json({}, 503), openaiOk())
+    const seen: number[] = []
+    await (await provider('openai')).generate('hi', { onRetry: (attempt) => seen.push(attempt) })
+    expect(seen).toEqual([1])
   })
 
   it('retries a network failure (fetch rejected with TypeError)', async () => {
@@ -112,6 +126,15 @@ describe('retry helpers', () => {
     expect(isRetryable(Object.assign(new Error('sdk'), { status: 403 }))).toBe(false)
     expect(isRetryable(new TypeError('fetch failed'))).toBe(true)
     expect(isRetryable(new Error('gemini timed out after 15000ms'))).toBe(false)
+  })
+
+  it("reads Gemini's RetryInfo.retryDelay as a retry hint", () => {
+    const err = Object.assign(new Error('quota'), {
+      status: 429,
+      errorDetails: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '37s' }],
+    })
+    expect(retryHintMs(err)).toBe(37000)
+    expect(retryHintMs(Object.assign(new Error('x'), { status: 429 }))).toBeUndefined()
   })
 
   it('parses Retry-After seconds and HTTP dates', () => {

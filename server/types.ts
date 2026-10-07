@@ -76,17 +76,50 @@ export interface Order {
   message?: string
 }
 
+/**
+ * Who produced a faction's orders this turn:
+ *   human    - the player's natural-language command, via the interpreter
+ *   quick    - the player's quick-strategy button (interpreter unavailable)
+ *   ai       - an AI opponent's model reply
+ *   fallback - the deterministic planner, after an AI opponent's call failed
+ */
+export type OrderSource = 'human' | 'quick' | 'ai' | 'fallback'
+
 export interface FactionOrders {
   orders: Order[]
-  reasoning?: string
+  /** One short public sentence about the plan. Never hidden reasoning. */
+  summary?: string
+  source?: OrderSource
+}
+
+/** Model calls made to resolve one turn (logged, recorded in history, asserted in tests). */
+export interface ModelCallCount {
+  interpreter: number
+  opponents: number
+  narrator: number
+  total: number
+}
+
+/** What the human asked for and what came of it - compact, no prompts or raw model output. */
+export interface HumanTurnRecord {
+  faction: string
+  command: string | null
+  quick: string | null
+  interpretation: string
+  warnings: string[]
+  accepted: string[]
+  rejected: string[]
 }
 
 export interface TurnResult {
   turn: number
   timestamp: string
+  resolutionOrder: string[]
   orders: Record<string, FactionOrders>
   events: GameEvent[]
-  narrative?: string
+  headline: string
+  human?: HumanTurnRecord
+  modelCalls: ModelCallCount
 }
 
 export interface GameEvent {

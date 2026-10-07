@@ -1,23 +1,14 @@
 /**
  * Turn resolver tests. The engine is pure logic over game/initial-world.json;
- * the only I/O is the AI layer, which is mocked here, so no API key is needed.
- * Dice are pinned by mocking Math.random: a die is floor(random * 6) + 1.
+ * playOrders() resolves a turn from given orders with no model calls, so no
+ * API key is needed. Dice are pinned by mocking Math.random: a die is
+ * floor(random * 6) + 1. The Human vs AI turn lifecycle is in turn.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FactionOrders, Order } from './types.js'
+import type { Order } from './types.js'
+import { GameEngine } from './engine.js'
 
 const orders: Record<string, Order[]> = {}
-
-vi.mock('./ai.js', () => ({
-  getFactionOrders: vi.fn(async (factionId: string): Promise<FactionOrders> => ({
-    orders: orders[factionId] ?? [],
-    reasoning: 'test',
-  })),
-  getNarrative: vi.fn(async () => 'narrative'),
-}))
-
-const { GameEngine, StaleTurnError } = await import('./engine.js')
-const ai = await import('./ai.js')
 
 /** Pin every die roll this turn to `face` (1-6). */
 function dice(face: number) {
@@ -51,7 +42,7 @@ describe('initial world', () => {
 
   it('reset() restores a fresh world after a turn has mutated it', async () => {
     orders.nato = [{ action: 'fortify', territory: 'western_na' }]
-    await engine.executeTurn()
+    engine.playOrders(orders)
     engine.reset()
     expect(engine.state.game.turn).toBe(0)
     expect(territory('western_na').fortified).toBe(false)
@@ -61,7 +52,7 @@ describe('initial world', () => {
 
 describe('resource gain', () => {
   it('pays upkeep, territory yield, trade networks and central banking', async () => {
-    await engine.executeTurn()
+    engine.playOrders(orders)
     const china = engine.state.factions.china.resources
     // gold 20 + east_asia 4 + southeast_asia 3 + 2 coastal (econ 1) = 29, +10% (econ 2) = 31
     expect(china.gold).toBe(31)
@@ -76,20 +67,20 @@ describe('resource gain', () => {
     for (const t of Object.values(engine.state.map.territories)) {
       if (t.owner === 'russia') t.resources = {}
     }
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(engine.state.factions.russia.resources.food).toBe(0)
   })
 
   it('pays a continent bonus only for a whole continent', async () => {
     const before = engine.state.factions.nato.resources.gold
-    await engine.executeTurn()
+    engine.playOrders(orders)
     const noBonus = engine.state.factions.nato.resources.gold - before
 
     engine.reset()
     territory('central_america').owner = 'nato' // completes North America
     territory('central_america').resources = {}
     const before2 = engine.state.factions.nato.resources.gold
-    await engine.executeTurn()
+    engine.playOrders(orders)
     const withBonus = engine.state.factions.nato.resources.gold - before2
     // +4 gold bonus, +1 coastal (central_america is coast), both before the 10% interest
     expect(withBonus).toBeGreaterThanOrEqual(noBonus + 5)
@@ -98,20 +89,20 @@ describe('resource gain', () => {
 
 describe('orders', () => {
   it('records a forfeit when a faction returns no orders', async () => {
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.filter(e => e.type === 'forfeit').map(e => e.faction).sort()).toEqual(['china', 'nato', 'russia'])
   })
 
   it('moves a unit between own territories', async () => {
     orders.nato = [{ action: 'move', unit: 'nato-inf-1', to: 'alaska' }]
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(unit('nato', 'nato-inf-1')!.territory).toBe('alaska')
     expect(result.events.find(e => e.faction === 'nato')!.type).toBe('move')
   })
 
   it('rejects a move no unit can reach', async () => {
     orders.nato = [{ action: 'move', unit: 'nato-inf-1', to: 'pakistan' }]
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.find(e => e.faction === 'nato')!.type).toBe('invalid')
     expect(unit('nato', 'nato-inf-1')!.territory).toBe('western_na')
   })
@@ -122,7 +113,7 @@ describe('orders', () => {
       { action: 'fortify', territory: 'siberia' },
     ]
     const ironBefore = engine.state.factions.nato.resources.iron
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(territory('western_na').fortified).toBe(true)
     expect(result.events.filter(e => e.faction === 'nato').map(e => e.type)).toEqual(['fortify', 'invalid'])
     // +8 iron income (alaska 1, scandinavia 2, eastern_europe 2, australia 3),
@@ -134,7 +125,7 @@ describe('orders', () => {
     orders.china = [{ action: 'recruit', type: 'artillery', territory: 'east_asia' }] // military 1 < 2
     orders.nato = [{ action: 'recruit', type: 'artillery', territory: 'western_na' }]
     const natoUnits = engine.state.factions.nato.units.length
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.find(e => e.faction === 'china')!.type).toBe('invalid')
     expect(result.events.find(e => e.faction === 'nato')!.type).toBe('recruit')
     expect(engine.state.factions.nato.units).toHaveLength(natoUnits + 1)
@@ -143,7 +134,7 @@ describe('orders', () => {
   it('research spends knowledge and raises the level; maxed tech is refused', async () => {
     orders.china = [{ action: 'research', tech: 'military' }]
     orders.nato = [{ action: 'research', tech: 'nuclear' }] // already 3
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(engine.state.factions.china.tech.military).toBe(2)
     expect(engine.state.factions.china.resources.knowledge).toBe(9 - 5)
     expect(engine.state.factions.nato.tech.nuclear).toBe(3)
@@ -154,7 +145,7 @@ describe('combat', () => {
   it('artillery with precision strike ignores the fort and wins on a high roll', async () => {
     dice(6)
     orders.russia = [{ action: 'attack', unit: 'russia-art-1', target: 'eastern_europe' }]
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     const ev = result.events.find(e => e.type === 'combat')!
     expect(ev.faction).toBe('russia')
     expect(territory('eastern_europe').owner).toBe('russia')
@@ -166,7 +157,7 @@ describe('combat', () => {
   it('a middling roll is a draw: both units damaged, both gain xp', async () => {
     dice(6) // armor 3 vs infantry 2 + fort 2: roll = 6 + (3 - 4) = 5
     orders.russia = [{ action: 'attack', unit: 'russia-arm-1', target: 'eastern_europe' }]
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(territory('eastern_europe').owner).toBe('nato')
     expect(unit('russia', 'russia-arm-1')).toMatchObject({ hp: 1, xp: 1 })
     expect(unit('nato', 'nato-inf-5')).toMatchObject({ hp: 1, xp: 1 })
@@ -175,7 +166,7 @@ describe('combat', () => {
   it('a low roll repels the attacker', async () => {
     dice(1)
     orders.russia = [{ action: 'attack', unit: 'russia-art-1', target: 'eastern_europe' }]
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.find(e => e.type === 'combat')!.faction).toBe('nato')
     expect(unit('russia', 'russia-art-1')).toBeUndefined()
     expect(unit('nato', 'nato-inf-5')!.xp).toBe(1)
@@ -185,7 +176,7 @@ describe('combat', () => {
   it('mercenaries defend neutral land and are cleared on a win', async () => {
     dice(6)
     orders.nato = [{ action: 'move', unit: 'nato-inf-5', to: 'ukraine' }]
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(territory('ukraine')).toMatchObject({ owner: 'nato', mercenaries: 0 })
     expect(unit('nato', 'nato-inf-5')!.territory).toBe('ukraine')
   })
@@ -193,7 +184,7 @@ describe('combat', () => {
   it('mercenaries repel a weak attack and keep the territory neutral', async () => {
     dice(1)
     orders.nato = [{ action: 'move', unit: 'nato-inf-5', to: 'ukraine' }]
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(territory('ukraine')).toMatchObject({ owner: null, mercenaries: 4 })
     expect(unit('nato', 'nato-inf-5')!.hp).toBe(1)
   })
@@ -202,12 +193,12 @@ describe('combat', () => {
 describe('diplomacy', () => {
   it('an alliance forms only when both sides propose', async () => {
     orders.nato = [{ action: 'diplomacy', to: 'china', proposal: 'alliance' }]
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(engine.state.factions.nato.alliances).toEqual([])
 
     orders.china = [{ action: 'diplomacy', to: 'nato', proposal: 'alliance' }]
     delete orders.nato
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(engine.state.factions.nato.alliances).toEqual(['china'])
     expect(engine.state.factions.china.alliances).toEqual(['nato'])
   })
@@ -216,13 +207,13 @@ describe('diplomacy', () => {
     engine.state.factions.nato.alliances = ['china']
     engine.state.factions.china.alliances = ['nato']
     orders.nato = [{ action: 'break_alliance', to: 'china' }]
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.find(e => e.faction === 'nato')!.type).toBe('betrayal')
     expect(engine.state.factions.nato.oathbreaker).toBe(true)
     expect(engine.state.factions.china.alliances).toEqual([])
 
     orders.nato = [{ action: 'diplomacy', to: 'russia', proposal: 'alliance' }]
-    const next = await engine.executeTurn()
+    const next = engine.playOrders(orders)
     expect(next.events.find(e => e.faction === 'nato')!.type).toBe('invalid')
   })
 })
@@ -234,7 +225,7 @@ describe('nukes', () => {
     engine.state.factions.nato.tech.nuclear = 2
     orders.china = [{ action: 'nuke', target: 'australia' }]
     const nukesBefore = engine.state.factions.china.nukes
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.find(e => e.faction === 'china')!.type).toBe('nuke')
     expect(territory('australia')).toMatchObject({ owner: null, fortified: false, resources: {} })
     expect(engine.state.factions.nato.units.some(u => u.territory === 'australia')).toBe(false)
@@ -243,7 +234,7 @@ describe('nukes', () => {
 
   it('refuses to nuke your own territory', async () => {
     orders.china = [{ action: 'nuke', target: 'east_asia' }]
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(result.events.find(e => e.faction === 'china')!.type).toBe('invalid')
     expect(territory('east_asia').owner).toBe('china')
   })
@@ -252,7 +243,7 @@ describe('nukes', () => {
 describe('game end', () => {
   it('ends at maxTurns with the highest score as victor', async () => {
     engine.state.game.turn = engine.state.game.maxTurns - 1
-    const result = await engine.executeTurn()
+    const result = engine.playOrders(orders)
     expect(engine.state.game.status).toBe('finished')
     const scores = Object.entries(engine.state.factions).map(([id, f]) => [id, f.score] as const)
     const best = scores.reduce((a, b) => (b[1] > a[1] ? b : a))
@@ -266,13 +257,13 @@ describe('game end', () => {
       territory(id).owner = 'russia'
       territory(id).mercenaries = 0
     }
-    await engine.executeTurn()
+    engine.playOrders(orders)
     expect(engine.state.game.status).toBe('finished')
     expect(engine.state.game.victor).toBe('russia')
   })
 
   it('updates territory counts and scores every turn', async () => {
-    await engine.executeTurn()
+    engine.playOrders(orders)
     const nato = engine.state.factions.nato
     const owned = Object.values(engine.state.map.territories).filter(t => t.owner === 'nato').length
     expect(nato.territoryCount).toBe(owned)
@@ -280,20 +271,3 @@ describe('game end', () => {
   })
 })
 
-describe('stop -> start mid-turn', () => {
-  it('discards a turn that was in flight when the game was reset', async () => {
-    let release!: () => void
-    const gate = new Promise<void>(r => { release = r })
-    vi.mocked(ai.getFactionOrders).mockImplementation(async () => {
-      await gate
-      return { orders: [], reasoning: 'late' }
-    })
-    const inFlight = engine.executeTurn()
-    engine.reset() // what start() does while the old turn awaits the AI
-    release()
-    await expect(inFlight).rejects.toBeInstanceOf(StaleTurnError)
-    expect(engine.state.game.turn).toBe(0)
-    expect(engine.turnHistory).toHaveLength(0)
-    expect(engine.chatLog.some(m => m.message.includes('late') || m.message.includes('forfeit'))).toBe(false)
-  })
-})
