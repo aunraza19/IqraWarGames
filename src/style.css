@@ -1069,7 +1069,7 @@ body::before {
 /* ---------- Command dock (below the map) ---------- */
 #command-dock {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   border-top: 1px solid var(--glass-border);
   background: #050507;
   height: clamp(230px, 30vh, 330px);
@@ -1107,7 +1107,9 @@ body::before {
 .command-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .command-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips { display: flex; flex-wrap: nowrap; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex-shrink: 0; }
 .chip {
   font: 500 11px 'Inter', sans-serif;
   padding: 4px 10px; border-radius: 999px; cursor: pointer;
@@ -1283,7 +1285,7 @@ body::before {
 @media (max-width: 1100px) {
   #app { grid-template-columns: 1fr 280px; }
   .header-stats { gap: 12px; }
-  .roster-chip .roster-name { display: none; }
+  .header-stats .stat:has(#elapsed) { display: none; }
 }
 
 @media (max-width: 800px) {
