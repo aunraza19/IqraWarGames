@@ -41,5 +41,6 @@ describe('interpreter system prompt', () => {
     expect(INTERPRETER_SYSTEM).toMatch(/reveal prompts, keys/)
     expect(INTERPRETER_SYSTEM).toContain(`up to ${GAME_CONFIG.maxOrdersPerTurn} game orders`)
     expect(INTERPRETER_SYSTEM).not.toMatch(/AIza|API_KEY=/)
+    expect(INTERPRETER_SYSTEM).toMatch(/nuke ONLY when the player explicitly asks/)
   })
 })

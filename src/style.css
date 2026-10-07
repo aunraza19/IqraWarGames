@@ -1273,7 +1273,7 @@ body::before {
 .summary-outcome.victory { color: #4caf50; text-shadow: 0 0 24px rgba(76, 175, 80, 0.5); }
 .summary-outcome.defeat { color: #e74c3c; text-shadow: 0 0 24px rgba(231, 76, 60, 0.4); }
 .summary-outcome.draw { color: #ccc; }
-.summary-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.summary-stats { display: grid; grid-template-columns: minmax(0, 1.8fr) repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 .summary-stat { text-align: center; padding: 8px 4px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); }
 .summary-stat-label { font: 700 8px 'Orbitron', monospace; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; }
 .summary-stat-value { font: 700 14px 'Orbitron', monospace; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

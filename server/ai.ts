@@ -220,6 +220,7 @@ HOW TO INTERPRET:
 - Map place names to territory ids using the briefing and the TERRITORY NAMES list.
 - If part of the command is impossible (missing warheads, unaffordable, unreachable, units the game does not have such as dragons, aliens or superweapons), do not fake it: replace it with the closest legal action that serves the same goal, and add a short warning such as "No operational warheads - prioritised nuclear research instead."
 - Vague but strategic commands ("attack them", "do something", "play defensively") get a sensible best-effort plan.
+- Use build_nuke or nuke ONLY when the player explicitly asks for nuclear weapons. "All-in", "destroy them" or "final push" mean conventional attacks.
 - Set understood=false and return no orders only when the text expresses no strategic intent at all (gibberish, a greeting, an unrelated question).
 - Never give more than ${GAME_CONFIG.maxOrdersPerTurn} orders.
 

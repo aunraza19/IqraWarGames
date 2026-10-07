@@ -844,7 +844,8 @@ class WarGamesApp {
     body.appendChild(actions)
 
     modal.classList.remove('hidden')
-    again.focus()
+    body.scrollTop = 0
+    again.focus({ preventScroll: true })
   }
 
   private showFullDetails(container: HTMLElement) {
