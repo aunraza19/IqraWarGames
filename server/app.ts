@@ -3,7 +3,7 @@
  * provider and listens) so the API can be exercised in tests without a key.
  */
 
-import express from 'express'
+import express, { type NextFunction, type Request, type Response } from 'express'
 import cors from 'cors'
 import { existsSync } from 'fs'
 import { dirname, resolve } from 'path'
@@ -90,6 +90,19 @@ export function createApp(engine: GameEngine, opts: { serveDist?: boolean } = {}
     app.use(express.static(distDir))
     app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile('index.html', { root: distDir }))
   }
+
+  // Malformed or oversized JSON bodies (and anything else thrown in a route) get a short JSON
+  // error - never Express's default HTML page with a stack trace.
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err)
+    const status = (err as { status?: unknown })?.status
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+      res.status(status).json({ error: status === 413 ? 'Request too large.' : 'Bad request.', code: 'bad_request' })
+      return
+    }
+    console.error('Unhandled request error:', err)
+    res.status(500).json({ error: 'Game server error. Please restart the round.', code: 'server_error' })
+  })
 
   return app
 }

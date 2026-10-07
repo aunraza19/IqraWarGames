@@ -571,6 +571,17 @@ describe('HTTP API', () => {
     })
   })
 
+  it('answers malformed or oversized JSON with a short JSON error, never a stack trace', async () => {
+    await withServer(async (base) => {
+      const bad = await fetch(`${base}/api/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{bad json' })
+      expect(bad.status).toBe(400)
+      expect(await bad.json()).toEqual({ error: 'Bad request.', code: 'bad_request' })
+      const big = await post(`${base}/api/player-command`, { gameId: 'g', turn: 1, command: 'x'.repeat(40_000) })
+      expect(big.status).toBe(413)
+      expect(await big.text()).not.toMatch(/at .*\.js|node_modules/)
+    })
+  })
+
   it('refuses requests from other origins', async () => {
     await withServer(async (base) => {
       const res = await fetch(`${base}/api/reset`, { method: 'POST', headers: { Origin: 'https://evil.example' } })
