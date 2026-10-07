@@ -116,7 +116,8 @@ export interface Session {
   aiStatus: 'idle' | 'thinking' | 'retrying'
   outcome: 'victory' | 'defeat' | 'draw' | null
   finalScore: number | null
-  availableActions: string[]
+  /** The Action Assistant; null unless it is the player's turn. */
+  assistant: ActionAssistant | null
   lastReport: TurnReport | null
 }
 
@@ -140,4 +141,33 @@ export interface CommandError {
   interpretation?: string
   warnings?: string[]
   rejected?: string[]
+}
+
+export type ActionCategory = 'military' | 'development' | 'intelligence' | 'diplomacy' | 'nuclear'
+
+export interface ActionOption {
+  label: string
+  template: string
+  available: boolean
+  reason?: string
+}
+
+/** One engine action as the Action Assistant presents it (built server-side, see server/assistant.ts). */
+export interface ActionStatus {
+  action: string
+  label: string
+  icon: string
+  category: ActionCategory
+  description: string
+  advanced: boolean
+  available: boolean
+  reason?: string
+  templates: string[]
+  options: ActionOption[]
+}
+
+export interface ActionAssistant {
+  actions: ActionStatus[]
+  suggested: string[]
+  strategies: { label: string; template: string }[]
 }

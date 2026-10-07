@@ -1,5 +1,6 @@
 import { FlatMap } from './flatmap.js'
-import type { GameState, ChatMessage, GameEvent, FactionId, Session, CommandResponse, CommandError, TurnReport } from './types.js'
+import type { GameState, ChatMessage, GameEvent, FactionId, Session, CommandResponse, CommandError, TurnReport, ActionAssistant, ActionCategory, ActionStatus } from './types.js'
+import { insertTemplate } from './prompt.js'
 import { clearLeaderboard, recordResult, topScores, type LeaderboardFaction } from './leaderboard.js'
 import 'leaflet/dist/leaflet.css'
 import './style.css'
@@ -18,13 +19,14 @@ const FACTION_TAGLINE: Record<FactionId, string> = {
   china: 'The biggest army and a strong economy - but only two territories.',
 }
 
-const EXAMPLE_COMMANDS = [
-  'Attack the weakest nearby territory',
-  'Recruit more infantry',
-  'Improve military technology',
-  'Play defensively this turn',
-  'Focus on getting uranium',
-]
+const CATEGORY_LABELS: Record<ActionCategory, string> = {
+  military: 'MILITARY',
+  development: 'DEVELOPMENT',
+  intelligence: 'INTELLIGENCE',
+  diplomacy: 'DIPLOMACY',
+  nuclear: 'NUCLEAR / ADVANCED',
+}
+const CATEGORY_ORDER: ActionCategory[] = ['military', 'development', 'intelligence', 'diplomacy', 'nuclear']
 
 const EVENT_ICONS: Record<string, string> = {
   move: '➔',
@@ -68,6 +70,8 @@ class WarGamesApp {
   private timerInterval: ReturnType<typeof setInterval> | null = null
   private startTime = 0
   private lastDisplayedTurn = 0
+  /** Last assistant payload rendered, to skip identical re-renders while polling. */
+  private assistantKey = ''
   /** Game id whose end screen has been shown (and recorded on the leaderboard). */
   private endShownFor: string | null = null
   private lbTab: LeaderboardFaction = 'nato'
@@ -100,17 +104,11 @@ class WarGamesApp {
         this.submitOrders({ command: input.value })
       }
     })
-    const chips = $('command-chips')
-    for (const text of EXAMPLE_COMMANDS) {
-      const chip = h('button', 'chip', text)
-      chip.type = 'button'
-      chip.addEventListener('click', () => {
-        input.value = text
-        this.updateCharCount()
-        input.focus()
-      })
-      chips.appendChild(chip)
-    }
+    $('guide-toggle').addEventListener('click', () => this.toggleGuide())
+    $('guide-close').addEventListener('click', () => this.toggleGuide(false))
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('action-guide').classList.contains('hidden')) this.toggleGuide(false)
+    })
     for (const btn of document.querySelectorAll<HTMLButtonElement>('#quick-strategies [data-quick]')) {
       btn.addEventListener('click', () => this.submitOrders({ quick: btn.dataset.quick! }))
     }
@@ -311,6 +309,7 @@ class WarGamesApp {
       }
     }
     this.submitting = true
+    this.toggleGuide(false)
     this.lockCommands(true)
     this.hideNotice()
     this.setStatus(payload.quick ? 'EXECUTING QUICK STRATEGY...' : 'INTERPRETING YOUR ORDERS...')
@@ -378,7 +377,11 @@ class WarGamesApp {
     $<HTMLTextAreaElement>('command-input').disabled = !canPlay
     $<HTMLButtonElement>('btn-execute').disabled = !canPlay
     $<HTMLButtonElement>('btn-execute').textContent = locked ? 'WORKING...' : 'EXECUTE ORDERS'
-    for (const b of document.querySelectorAll<HTMLButtonElement>('#quick-strategies button, .chip')) b.disabled = !canPlay
+    $<HTMLButtonElement>('guide-toggle').disabled = !canPlay
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#quick-strategies button, .assist-btn')) {
+      // Examples for a locked action stay disabled whatever the turn state.
+      b.disabled = !canPlay || b.dataset.locked === '1'
+    }
   }
 
   /** While a turn is processing, poll the session only to show "thinking / retrying". */
@@ -633,17 +636,129 @@ class WarGamesApp {
       turnEl.textContent = ''
     }
 
-    const avail = $('available-actions')
-    avail.replaceChildren()
-    if (s.phase === 'waiting_for_player' && s.availableActions.length) {
-      avail.append(h('span', 'avail-label', 'AVAILABLE NOW'), ...s.availableActions.map((a) => h('span', 'avail-item', a)))
-    }
+    this.renderAssistant(s)
 
     if (!this.submitting && !this.pollTimer) this.lockCommands(false)
     if (s.phase === 'finished' && !this.reportVisible) {
       $('command-form').classList.add('hidden')
     }
     this.updateCharCount()
+  }
+
+  // ---------- Action Assistant ----------
+  // Every button here only writes a plain-English example into the orders box.
+  // Nothing is sent until the player presses EXECUTE ORDERS, and the example
+  // still goes through the AI interpreter like anything typed by hand.
+
+  /** Put an example into the orders box (see prompt.ts) and hand focus back to it. */
+  private useTemplate(template: string) {
+    const input = $<HTMLTextAreaElement>('command-input')
+    if (input.disabled) return
+    const max = this.session?.maxCommandLength ?? 500
+    input.value = insertTemplate(input.value, template, max).text
+    this.updateCharCount()
+    input.focus()
+    input.setSelectionRange(input.value.length, input.value.length)
+  }
+
+  private assistBtn(className: string, text: string, template: string, locked: boolean, title?: string) {
+    const b = h('button', `assist-btn ${className}${locked ? ' locked' : ''}`, text)
+    b.type = 'button'
+    if (title) b.title = title
+    if (locked) {
+      b.dataset.locked = '1'
+      b.disabled = true
+      b.setAttribute('aria-disabled', 'true')
+    } else {
+      b.addEventListener('click', () => this.useTemplate(template))
+    }
+    return b
+  }
+
+  private toggleGuide(open?: boolean) {
+    const guide = $('action-guide')
+    const show = open ?? guide.classList.contains('hidden')
+    guide.classList.toggle('hidden', !show)
+    $('guide-toggle').setAttribute('aria-expanded', String(show))
+    if (show) guide.querySelector<HTMLElement>('.guide-close')?.focus()
+  }
+
+  private renderAssistant(s: Session) {
+    const hint = $('assist-hint')
+    hint.textContent = s.turn <= 1
+      ? 'New here? Try ATTACK, RECRUIT or RESEARCH - we write the order, you edit it, then EXECUTE.'
+      : 'Pick an action to add an example order, or type your own strategy.'
+    const a = s.assistant
+    if (!a) {
+      // Keep the last turn's buttons (disabled by lockCommands) while a turn resolves.
+      if (s.phase !== 'processing_turn') {
+        $('suggested').replaceChildren()
+        $('action-guide-body').replaceChildren()
+        this.assistantKey = ''
+        this.toggleGuide(false)
+      }
+      return
+    }
+    const key = JSON.stringify(a)
+    if (key === this.assistantKey) return
+    this.assistantKey = key
+    this.renderSuggested(a)
+    this.renderGuide(a)
+  }
+
+  private renderSuggested(a: ActionAssistant) {
+    const row = $('suggested')
+    row.replaceChildren(h('span', 'suggested-label', 'SUGGESTED'))
+    for (const action of a.suggested) {
+      const st = a.actions.find((x) => x.action === action)
+      if (!st) continue
+      row.appendChild(this.assistBtn('suggest-btn', `${st.icon} ${st.label.toUpperCase()}`, st.templates[0], false, `${st.description}\nAdds: "${st.templates[0]}"`))
+    }
+  }
+
+  private renderGuide(a: ActionAssistant) {
+    const body = $('action-guide-body')
+    const scroll = body.scrollTop
+    body.replaceChildren()
+
+    const ideas = h('div', 'guide-section')
+    ideas.appendChild(h('div', 'guide-section-title', 'STRATEGY IDEAS'))
+    const ideaRow = h('div', 'guide-ideas')
+    for (const idea of a.strategies) ideaRow.appendChild(this.assistBtn('idea-btn', idea.label.toUpperCase(), idea.template, false, idea.template))
+    ideas.appendChild(ideaRow)
+    body.appendChild(ideas)
+
+    for (const cat of CATEGORY_ORDER) {
+      const actions = a.actions.filter((x) => x.category === cat)
+      if (!actions.length) continue
+      const section = h('div', `guide-section ${cat}`)
+      section.appendChild(h('div', 'guide-section-title', CATEGORY_LABELS[cat]))
+      const grid = h('div', 'guide-grid')
+      for (const st of actions) grid.appendChild(this.actionCard(st))
+      section.appendChild(grid)
+      body.appendChild(section)
+    }
+    body.scrollTop = scroll
+  }
+
+  private actionCard(st: ActionStatus) {
+    const card = h('article', `action-card${st.available ? '' : ' is-locked'}${st.advanced ? ' advanced' : ''}`)
+    card.setAttribute('aria-label', `${st.label} - ${st.available ? 'available' : 'locked'}`)
+    const head = h('div', 'card-head')
+    head.append(h('span', 'card-title', `${st.icon} ${st.label.toUpperCase()}`), h('span', `card-state ${st.available ? 'ok' : 'locked'}`, st.available ? 'AVAILABLE' : 'LOCKED'))
+    card.append(head, h('div', 'card-desc', st.description))
+    if (!st.available && st.reason) card.appendChild(h('div', 'card-reason', `\uD83D\uDD12 ${st.reason}`))
+    if (st.options.length) {
+      const opts = h('div', 'card-options')
+      for (const o of st.options) {
+        opts.appendChild(this.assistBtn('option-btn', o.label, o.template, !o.available, o.available ? `Adds: "${o.template}"` : o.reason))
+      }
+      card.appendChild(opts)
+    }
+    const examples = h('div', 'card-examples')
+    for (const t of st.templates.slice(0, 3)) examples.appendChild(this.assistBtn('tpl-btn', `"${t}"`, t, !st.available, st.available ? 'Add to my orders' : st.reason))
+    card.appendChild(examples)
+    return card
   }
 
   private renderFactionPanels() {

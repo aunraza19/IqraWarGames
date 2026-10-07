@@ -35,6 +35,18 @@
     <div id="main">
       <div id="map-wrap">
         <div id="globe-container"></div>
+
+        <!-- Action Assistant: every action, what it does, whether you can use it now -->
+        <section class="action-guide hidden" id="action-guide" aria-labelledby="action-guide-title">
+          <div class="guide-head">
+            <div>
+              <div class="guide-title" id="action-guide-title">ALL ACTIONS</div>
+              <div class="guide-sub">Click an example to add it to your orders. Nothing happens until you press EXECUTE ORDERS.</div>
+            </div>
+            <button class="btn guide-close" id="guide-close" type="button" aria-label="Close the action list">CLOSE</button>
+          </div>
+          <div class="guide-body" id="action-guide-body"></div>
+        </section>
       </div>
 
       <div id="command-dock">
@@ -49,14 +61,15 @@
             <label class="sr-only" for="command-input">What are your orders?</label>
             <textarea id="command-input" rows="2" maxlength="500"
               placeholder="What are your orders? e.g. Attack the weakest nearby territory, recruit infantry, and improve military tech."></textarea>
+            <div class="assist-hint" id="assist-hint">Not sure what to do? Pick an action and we'll write an example order for you - edit it however you like.</div>
             <div class="command-row">
-              <div class="chips" id="command-chips" aria-label="Example orders"></div>
+              <div class="suggested" id="suggested" role="group" aria-label="Suggested actions for this turn"></div>
               <div class="command-actions">
+                <button class="btn guide-toggle" id="guide-toggle" type="button" aria-controls="action-guide" aria-expanded="false">ALL ACTIONS &#9652;</button>
                 <span class="char-count" id="char-count">0 / 500</span>
                 <button class="btn btn-execute" id="btn-execute" type="submit">EXECUTE ORDERS</button>
               </div>
             </div>
-            <div class="available" id="available-actions"></div>
           </form>
 
           <div class="command-status hidden" id="command-status" role="status" aria-live="polite"></div>
