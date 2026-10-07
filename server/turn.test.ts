@@ -424,7 +424,7 @@ describe('turn integrity', () => {
     const info = engine.sessionInfo()
     expect(info.outcome).toMatch(/victory|defeat|draw/)
     expect(info.finalScore).toBeGreaterThan(0)
-    expect(info.availableActions).toEqual([])
+    expect(info.assistant).toBeNull()
     calls.length = 0
     const err = await rejection(engine.submitCommand({ gameId: engine.gameId!, turn: engine.state.game.maxTurns + 1, command: 'Research.' }))
     expect(err.code).toBe('game_over')
@@ -513,14 +513,42 @@ describe('validator agrees with the resolver', () => {
   })
 })
 
-describe('session hints', () => {
-  it('lists only actions that are possible right now', () => {
+describe('action assistant in the session', () => {
+  it('is served with the state while waiting for the player, and costs no model call', async () => {
     engine.start('Aun', 'nato')
-    expect(engine.sessionInfo().availableActions).toEqual(expect.arrayContaining(['Attack', 'Recruit', 'Research', 'Nuclear strike']))
+    const a = engine.sessionInfo().assistant!
+    expect(a.actions.find((x) => x.action === 'nuke')!.available).toBe(true)
     engine.state.factions.nato.nukes = 0
-    expect(engine.sessionInfo().availableActions).not.toContain('Nuclear strike')
+    expect(engine.sessionInfo().assistant!.actions.find((x) => x.action === 'nuke')).toMatchObject({ available: false, reason: 'You have no warheads - build one first.' })
+    await withServerless()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('a turn played from an inserted template still costs exactly 3 calls', async () => {
+    engine.start('Aun', 'russia')
+    const template = engine.sessionInfo().assistant!.actions.find((x) => x.action === 'fortify')!.templates[0]
+    replies.interpreter = () => interpreter([{ action: 'fortify', territory: 'siberia' }])
+    await play(template)
+    expect(calls.map((c) => c.role).sort()).toEqual(['china', 'interpreter', 'nato'])
+    expect(engine.turnHistory[0].modelCalls).toEqual({ interpreter: 1, opponents: 2, narrator: 0, total: 3 })
   })
 })
+
+/** Read the state the way the browser does, repeatedly - the assistant is part of every response. */
+async function withServerless() {
+  const app = createApp(engine, { serveDist: false })
+  const server = app.listen(0, '127.0.0.1')
+  await new Promise((r) => server.once('listening', r))
+  const { port } = server.address() as AddressInfo
+  try {
+    for (let i = 0; i < 3; i++) {
+      const s = await (await fetch(`http://127.0.0.1:${port}/api/state`)).json()
+      expect(s.session.assistant.actions).toHaveLength(13)
+    }
+  } finally {
+    server.close()
+  }
+}
 
 describe('HTTP API', () => {
   async function withServer(fn: (base: string) => Promise<void>) {

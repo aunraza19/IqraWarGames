@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url'
 import type { GameState, Unit, Order, FactionOrders, TurnResult, GameEvent, ChatMessage, ModelCallCount, OrderSource, HumanTurnRecord } from './types.js'
 import { getOpponentOrders, interpretCommand, type OrderVocabulary } from './ai.js'
 import { FACTION_IDS, GAME_CONFIG, type FactionId } from './config.js'
-import { availableActions, cleanText, describeOrder, factionLabel, validateOrders } from './orders.js'
+import { cleanText, describeOrder, factionLabel, validateOrders } from './orders.js'
+import { buildActionAssistant } from './assistant.js'
 import { FALLBACK_FOCUS, planFallbackOrders, type StrategyFocus } from './fallback.js'
 import { buildTurnReport, type TurnReport } from './summary.js'
 import { eventScore, factionScore, outcomeFor, type Outcome } from './scoring.js'
@@ -195,7 +196,8 @@ export class GameEngine {
       aiStatus: this.aiStatus,
       outcome: outcomeFor(this.state, this.humanFaction) as Outcome | null,
       finalScore: eventScore(this.state, this.humanFaction),
-      availableActions: this.humanFaction && this.phase === 'waiting_for_player' ? availableActions(this.state, this.humanFaction) : [],
+      /** What the player can do this turn, for the Action Assistant (deterministic, no model call). */
+      assistant: this.humanFaction && this.phase === 'waiting_for_player' ? buildActionAssistant(this.state, this.humanFaction) : null,
       lastReport: this.lastReport,
     }
   }
